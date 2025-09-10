@@ -1,0 +1,298 @@
+import React, { useMemo, useState } from "react";
+
+/**
+ * Core Skills 2030 — Interactive App
+ * - Quadrant scatter of skills (2025 core share vs. 2030 expected increase)
+ * - Filter by category/quadrant, search, and language toggle
+ * - Build a personal 2030 upskilling plan with priorities and weekly habit ideas
+ *
+ * Notes
+ * - Tailwind CSS is available in this environment. 
+ * - This file exports a single React component as required.
+ */
+
+// --- Data model -------------------------------------------------------------
+// x = % of employers considering it a core skill in 2025
+// y = % expecting increase in use by 2030
+const CATEGORIES = {
+  cognitive: { label: { en: "Cognitive Skills", fr: "Compétences cognitives", ar: "المهارات المعرفية" }, color: "bg-blue-500" },
+  engagement: { label: { en: "Engagement Skills", fr: "Compétences d'engagement", ar: "مهارات الانخراط" }, color: "bg-cyan-400" },
+  ethics: { label: { en: "Ethics", fr: "Éthique", ar: "الأخلاق" }, color: "bg-sky-700" },
+  management: { label: { en: "Management", fr: "Gestion", ar: "الإدارة" }, color: "bg-amber-500" },
+  physical: { label: { en: "Physical Abilities", fr: "Capacités physiques", ar: "القدرات البدنية" }, color: "bg-lime-500" },
+  selfeff: { label: { en: "Self‑efficacy", fr: "Auto‑efficacité", ar: "الكفاءة الذاتية" }, color: "bg-fuchsia-600" },
+  tech: { label: { en: "Technology Skills", fr: "Compétences technologiques", ar: "المهارات التقنية" }, color: "bg-purple-600" },
+  working: { label: { en: "Working with Others", fr: "Travailler avec les autres", ar: "العمل مع الآخرين" }, color: "bg-orange-500" },
+};
+
+const QUADS = {
+  emerging: { label: { en: "Emerging", fr: "Émergentes", ar: "ناشئة" } },
+  core2030: { label: { en: "Core (2030)", fr: "Cœur (2030)", ar: "أساسية 2030" } },
+  steady: { label: { en: "Steady", fr: "Stables", ar: "ثابتة" } },
+  out: { label: { en: "Out‑of‑focus", fr: "Moins essentielles", ar: "خارج التركيز" } },
+};
+
+const SKILLS = [
+  { name: "AI & Big Data", x: 40, y: 88, cat: "tech" },
+  { name: "Technological Literacy", x: 60, y: 70, cat: "tech" },
+  { name: "Curiosity & Lifelong Learning", x: 46, y: 63, cat: "selfeff" },
+  { name: "Creative Thinking", x: 60, y: 66, cat: "cognitive" },
+  { name: "Analytical Thinking", x: 72, y: 54, cat: "cognitive" },
+  { name: "Resilience, Flexibility, Agility", x: 65, y: 76, cat: "selfeff" },
+  { name: "Leadership & Social Influence", x: 58, y: 58, cat: "management" },
+  { name: "Systems Thinking", x: 48, y: 46, cat: "cognitive" },
+  { name: "Talent Management", x: 45, y: 60, cat: "management" },
+  { name: "Motivation & Self‑awareness", x: 52, y: 50, cat: "selfeff" },
+  { name: "Empathy & Active Listening", x: 50, y: 47, cat: "working" },
+  { name: "Service Orientation & Customer Service", x: 54, y: 44, cat: "working" },
+  { name: "Resource Management & Operations", x: 44, y: 34, cat: "management" },
+  { name: "Quality Control", x: 32, y: 28, cat: "management" },
+  { name: "Dependability & Attention to Detail", x: 42, y: 22, cat: "ethics" },
+  { name: "Teaching & Mentoring", x: 30, y: 33, cat: "working" },
+  { name: "Marketing & Media", x: 28, y: 39, cat: "engagement" },
+  { name: "Programming", x: 25, y: 38, cat: "tech" },
+  { name: "Global Citizenship", x: 22, y: 32, cat: "engagement" },
+  { name: "Multi‑lingualism", x: 24, y: 34, cat: "engagement" },
+  { name: "Design & User Experience", x: 30, y: 50, cat: "cognitive" },
+  { name: "Networks & Cybersecurity", x: 28, y: 72, cat: "tech" },
+  { name: "Environmental Stewardship", x: 26, y: 56, cat: "ethics" },
+  { name: "Reading, Writing, Mathematics", x: 38, y: 18, cat: "cognitive" },
+  { name: "Manual Dexterity/Endurance/Precision", x: 12, y: 10, cat: "physical" },
+  { name: "Sensory‑processing Abilities", x: 18, y: 22, cat: "physical" },
+];
+
+// --- i18n -------------------------------------------------------------------
+const STR = {
+  title: { en: "Core Skills for 2030", fr: "Compétences clés pour 2030", ar: "مهارات أساسية لعام 2030" },
+  subtitle: {
+    en: "Explore the World Economic Forum skills landscape and build your personal upskilling plan.",
+    fr: "Explorez le paysage des compétences du WEF et construisez votre plan de perfectionnement.",
+    ar: "استكشف مشهد المهارات بحسب المنتدى الاقتصادي العالمي وابنِ خطة تطويرك الشخصية.",
+  },
+  search: { en: "Search skills…", fr: "Rechercher des compétences…", ar: "ابحث عن مهارة…" },
+  quadrant: { en: "Quadrant", fr: "Quadrant", ar: "الربع" },
+  category: { en: "Category", fr: "Catégorie", ar: "الفئة" },
+  plan: { en: "My 2030 Plan", fr: "Mon plan 2030", ar: "خطة 2030 الخاصة بي" },
+  priority: { en: "Priority", fr: "Priorité", ar: "الأولوية" },
+  add: { en: "Add", fr: "Ajouter", ar: "أضف" },
+  remove: { en: "Remove", fr: "Supprimer", ar: "إزالة" },
+  habits: { en: "Weekly Habit Idea", fr: "Idée d'habitude hebdo", ar: "فكرة عادة أسبوعية" },
+  export: { en: "Export Plan (JSON)", fr: "Exporter le plan (JSON)", ar: "تصدير الخطة (JSON)" },
+};
+
+const HABITS = [
+  "Read 2 industry reports",
+  "Ship 1 tiny project or demo",
+  "Teach a concept to someone",
+  "Shadow a colleague for 30 minutes",
+  "Write a 200‑word reflection",
+  "Automate one 5‑minute task",
+  "Join one expert webinar",
+  "Contribute one bug fix or doc edit",
+];
+
+function pickHabit() { return HABITS[Math.floor(Math.random() * HABITS.length)]; }
+
+// --- Components -------------------------------------------------------------
+function Legend({ lang }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {Object.entries(CATEGORIES).map(([k, v]) => (
+        <div key={k} className="flex items-center gap-2 border border-white/10 rounded-full px-2 py-1">
+          <span className={`h-3 w-3 rounded-full ${v.color}`}></span>
+          <span className="text-xs text-white/80">{v.label[lang]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Controls({ lang, qFilter, setQFilter, cFilter, setCFilter, query, setQuery }) {
+  return (
+    <div className="grid md:grid-cols-3 gap-3">
+      <input value={query} onChange={(e)=>setQuery(e.target.value)}
+        placeholder={STR.search[lang]} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
+
+      <select value={qFilter} onChange={(e)=>setQFilter(e.target.value)} className="rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-sm">
+        <option value="">{STR.quadrant[lang]}: All</option>
+        <option value="emerging">{QUADS.emerging.label[lang]}</option>
+        <option value="core2030">{QUADS.core2030.label[lang]}</option>
+        <option value="steady">{QUADS.steady.label[lang]}</option>
+        <option value="out">{QUADS.out.label[lang]}</option>
+      </select>
+
+      <select value={cFilter} onChange={(e)=>setCFilter(e.target.value)} className="rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-sm">
+        <option value="">{STR.category[lang]}: All</option>
+        {Object.entries(CATEGORIES).map(([k,v])=> (
+          <option key={k} value={k}>{v.label[lang]}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SkillDot({ s, onAdd }) {
+  const cat = CATEGORIES[s.cat];
+  return (
+    <button
+      className={`absolute -translate-x-1/2 -translate-y-1/2 text-[10px] hover:scale-110 transition-transform`} 
+      style={{ left: `${s.x}%`, bottom: `${s.y}%` }}
+      title={`${s.name} — ${s.x}% / ${s.y}%`}
+      onClick={()=>onAdd?.(s)}
+    >
+      <span className={`px-2 py-1 rounded-full text-white ${cat.color} shadow`}>{s.name}</span>
+    </button>
+  );
+}
+
+function QuadrantChart({ lang, skills, onAdd }) {
+  // Container axes labels
+  return (
+    <div className="relative w-full aspect-square bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border border-white/10 overflow-hidden">
+      {/* Axes grid */}
+      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+        {/* Out-of-focus */}
+        <div className="border-r border-b border-white/10 p-2">
+          <span className="text-[10px] text-white/60">{QUADS.out.label[lang]}</span>
+        </div>
+        {/* Steady */}
+        <div className="border-b border-white/10 p-2">
+          <span className="text-[10px] text-white/60">{QUADS.steady.label[lang]}</span>
+        </div>
+        {/* Emerging */}
+        <div className="border-r border-white/10 p-2">
+          <span className="text-[10px] text-white/60">{QUADS.emerging.label[lang]}</span>
+        </div>
+        {/* Core 2030 */}
+        <div className="p-2">
+          <span className="text-[10px] text-white/60">{QUADS.core2030.label[lang]}</span>
+        </div>
+      </div>
+
+      {/* Axis lines */}
+      <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/20" />
+      <div className="absolute left-0 right-0 top-1/2 h-px bg-white/20" />
+
+      {/* Labels */}
+      <div className="absolute left-2 top-2 text-[10px] text-white/60">2030 Increase ↑</div>
+      <div className="absolute right-2 bottom-2 text-[10px] text-white/60">2025 Core Share →</div>
+
+      {/* Dots */}
+      {skills.map((s)=> (
+        <SkillDot key={s.name} s={s} onAdd={onAdd} />
+      ))}
+    </div>
+  );
+}
+
+function PlanCard({ lang, item, onChange, onRemove }) {
+  return (
+    <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold">{item.name}</div>
+          <div className="text-xs text-white/60">{STR.habits[lang]}: {item.habit}</div>
+        </div>
+        <button onClick={onRemove} className="text-xs px-2 py-1 rounded bg-rose-500 hover:bg-rose-600">{STR.remove[lang]}</button>
+      </div>
+      <label className="text-xs opacity-80">{STR.priority[lang]}: {item.priority}</label>
+      <input type="range" min={1} max={5} value={item.priority} onChange={(e)=>onChange({ ...item, priority: Number(e.target.value) })} />
+      <textarea className="w-full rounded bg-black/30 border border-white/10 p-2 text-sm" rows={3}
+        placeholder="Next step / course / project…" value={item.next || ""}
+        onChange={(e)=>onChange({ ...item, next: e.target.value })} />
+    </div>
+  );
+}
+
+export default function App() {
+  const [lang, setLang] = useState("en");
+  const [qFilter, setQFilter] = useState("");
+  const [cFilter, setCFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [plan, setPlan] = useState([]);
+
+  const filtered = useMemo(()=>{
+    const q = query.toLowerCase();
+    return SKILLS.filter(s => {
+      const matchText = !q || s.name.toLowerCase().includes(q);
+      const matchCat = !cFilter || s.cat === cFilter;
+      if (!qFilter) return matchText && matchCat;
+      const isRight = s.x >= 40; // right of midline
+      const isTop = s.y >= 50;   // above midline
+      const quad = isTop && !isRight ? "emerging" : isTop && isRight ? "core2030" : !isTop && isRight ? "steady" : "out";
+      return matchText && matchCat && quad === qFilter;
+    });
+  }, [qFilter, cFilter, query]);
+
+  function addToPlan(skill) {
+    if (plan.find(p => p.name === skill.name)) return;
+    setPlan([...plan, { name: skill.name, habit: pickHabit(), priority: 3 }]);
+  }
+
+  function updateItem(idx, next) {
+    const copy = [...plan];
+    copy[idx] = next; setPlan(copy);
+  }
+
+  function exportPlan() {
+    const blob = new Blob([JSON.stringify({ plan, createdAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'core-skills-2030-plan.json'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white">
+      <header className="max-w-6xl mx-auto px-4 pt-8 pb-3 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{STR.title[lang]}</h1>
+          <p className="text-white/70 text-sm md:text-base max-w-2xl">{STR.subtitle[lang]}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {(["en","fr","ar"]).map(code => (
+            <button key={code} onClick={()=>setLang(code)}
+              className={`px-3 py-1 rounded-full text-sm border border-white/10 ${lang===code?"bg-white/20":"bg-white/5 hover:bg-white/10"}`}>
+              {code.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 pb-16 grid lg:grid-cols-5 gap-6">
+        <section className="lg:col-span-3 space-y-4">
+          <Legend lang={lang} />
+          <Controls lang={lang} qFilter={qFilter} setQFilter={setQFilter} cFilter={cFilter} setCFilter={setCFilter} query={query} setQuery={setQuery} />
+          <QuadrantChart lang={lang} skills={filtered} onAdd={addToPlan} />
+          <div className="text-xs text-white/60">Tip: Click any skill bubble to add it to your plan.</div>
+        </section>
+
+        <aside className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">{STR.plan[lang]}</h2>
+            <button onClick={exportPlan} className="rounded-xl bg-emerald-500 hover:bg-emerald-600 px-3 py-1 text-sm">{STR.export[lang]}</button>
+          </div>
+          {plan.length === 0 && (
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4 text-sm text-white/70">
+              • Use the chart to pick 3–5 skills.\n• Set priority, write your next step, and export the plan.
+            </div>
+          )}
+          <div className="grid gap-3">
+            {plan.map((p, i)=> (
+              <PlanCard key={p.name} lang={lang} item={p}
+                onChange={(next)=>updateItem(i, next)}
+                onRemove={()=>setPlan(plan.filter((_,idx)=>idx!==i))} />
+            ))}
+          </div>
+        </aside>
+      </main>
+
+      <footer className="max-w-6xl mx-auto px-4 pb-10 text-xs text-white/50">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>Data inspired by the World Economic Forum “Future of Jobs” survey (visual by Jeroen Kraaijenbrink). This is an educational demo.</div>
+          <a href="mailto:info@victoryhourmedia.com" className="underline/20 hover:underline">Build this for your team → info@victoryhourmedia.com</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
